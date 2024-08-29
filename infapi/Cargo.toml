@@ -1,0 +1,13 @@
+[package]
+name = "infapi"
+description = "Very simple InfluxDB v2 API used only for my personal stuff" 
+authors = ["Sardorbek Pulatov <sardo@hey.com>"]
+edition = "2021"
+version = "0.1.0"
+repository = ""
+license = "MIT"
+
+[dependencies]
+reqwest = "0.12"
+tokio = { version = "1", features = ["full"] }
+
