@@ -1,4 +1,5 @@
 use reqwest::header::{self, HeaderMap};
+use thiserror::Error;
 
 // Endpoints list
 const WRITE_API: &'static str = "/api/v2/write";
@@ -30,6 +31,12 @@ impl Default for Precision {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum InfError {
+    #[error("http client error: {0}")]
+    HttpError(String)
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct InfClient {
@@ -42,10 +49,13 @@ pub struct InfClient {
 }
 
 impl InfClient {
-    pub fn new(server_url: String, api_token: String, org: String) -> Self {
+    pub fn new<T>(server_url: T, api_token: T, org: T) -> Self
+    where
+        T: Into<String>,
+    {
         return InfClient {
-            server_url,
-            org,
+            server_url: server_url.into(),
+            org: org.into(),
             precision: Default::default(),
             http_client: HTTPTransport::new(api_token),
         };
@@ -65,12 +75,15 @@ impl InfClient {
         }
     }
 
-    pub async fn write_point(&self, bucket: &str, point: &str) -> Result<String, String> {
+    pub async fn write_point<T>(&self, bucket: T, point: T) -> Result<String, InfError>
+    where
+        T: Into<String>,
+    {
         let url = self.get_url(WRITE_API.to_string());
 
         return self
             .http_client
-            .make_post(url, bucket.to_string(), self.org.clone(), point.to_string())
+            .make_post(url, bucket.into(), self.org.clone(), point.into())
             .await;
     }
 
@@ -85,9 +98,13 @@ struct HTTPTransport {
 }
 
 impl HTTPTransport {
-    pub fn new(auth_token: String) -> Self {
+    pub fn new<T>(auth_token: T) -> Self
+    where
+        T: Into<String>,
+    {
         let mut headers = HeaderMap::new();
-        let mut auth = header::HeaderValue::from_str(format!("Token {}", auth_token).as_str()).unwrap();
+        let mut auth =
+            header::HeaderValue::from_str(format!("Token {}", auth_token.into()).as_str()).unwrap();
         auth.set_sensitive(true);
         headers.insert(header::AUTHORIZATION, auth);
 
@@ -106,7 +123,7 @@ impl HTTPTransport {
         bucket: String,
         org: String,
         data: String,
-    ) -> Result<String, String> {
+    ) -> Result<String, InfError> {
         let data = self
             .http_client
             .post(url)
@@ -115,7 +132,17 @@ impl HTTPTransport {
             .send()
             .await;
 
-        return Ok(data.unwrap().text().await.unwrap());
+        let resp = match data {
+            Ok(resp) => resp, 
+            Err(e) => return Err(InfError::HttpError(e.to_string()))
+        };
+
+        let txt = match resp.text().await {
+            Ok(t) => t,
+            Err(e) => return Err(InfError::HttpError(e.to_string()))
+        };
+
+        return Ok(txt);
     }
 }
 
