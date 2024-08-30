@@ -1,6 +1,6 @@
-use core::str;
-use std::io;
 use clap::Parser;
+use core::str;
+use std::{io, sync::Arc};
 use tokio::{net::UdpSocket, sync::mpsc};
 use tracing::{error, info};
 
@@ -16,7 +16,7 @@ struct Config {
     #[arg(long, env = "API_TOKEN")]
     api_token: String,
 
-    #[arg(long, env= "BUCKET")]
+    #[arg(long, env = "BUCKET")]
     bucket: String,
 }
 
@@ -26,27 +26,31 @@ async fn main() -> io::Result<()> {
 
     let config = Config::parse();
 
-    let influx_client = infapi::InfClient::new(config.server_url, config.api_token, config.org).precision(infapi::Precision::NS).build();
+    let influx_client = infapi::InfClient::new(config.server_url, config.api_token, config.org)
+        .precision(infapi::Precision::NS)
+        .build();
 
     let sock = UdpSocket::bind("0.0.0.0:9090").await?;
-    let mut buf = [0; 1024];
 
-    let (tx, mut rx) = mpsc::channel::<&str>(1000);
+    let (tx, mut rx) = mpsc::channel::<String>(1000);
 
     let bucket = config.bucket.clone();
 
     tokio::spawn(async move {
         while let Some(data) = rx.recv().await {
-            let res = influx_client.write_point(&bucket, data).await;
+            let res = influx_client
+                .write_point(bucket.to_string(), data.to_string())
+                .await;
             match res {
-                Ok(_) => {},
-                Err(e) => error!("Error while sending data to influxdb: {:?}", e)
+                Ok(_) => {}
+                Err(e) => error!("Error while sending data to influxdb: {:?}", e),
             }
         }
     });
 
     info!("Service is starting");
     loop {
+        let mut buf = [0; 1024];
         let (len, addr) = match sock.recv_from(&mut buf).await {
             Ok((len, addr)) => (len, addr),
             Err(e) => {
@@ -55,8 +59,15 @@ async fn main() -> io::Result<()> {
             }
         };
 
-        let data = str::from_utf8(&buf[..len]);
-        let _ = tx.send("data got").await;
+        let data = match String::from_utf8(buf[..len].to_vec()) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("error getting data from the buffer: {}", e);
+                continue;
+            }
+        };
+
+        let _ = tx.send(data.clone()).await;
 
         info!(
             "received: len: {:?}, addr: {:?}, data: {:?}",
@@ -64,4 +75,3 @@ async fn main() -> io::Result<()> {
         );
     }
 }
-
