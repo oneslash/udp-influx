@@ -1,6 +1,5 @@
 use clap::Parser;
-use core::str;
-use std::{io, sync::Arc};
+use std::io;
 use tokio::{net::UdpSocket, sync::mpsc};
 use tracing::{error, info};
 
@@ -31,9 +30,7 @@ async fn main() -> io::Result<()> {
         .build();
 
     let sock = UdpSocket::bind("0.0.0.0:9090").await?;
-
     let (tx, mut rx) = mpsc::channel::<String>(1000);
-
     let bucket = config.bucket.clone();
 
     tokio::spawn(async move {
@@ -51,7 +48,7 @@ async fn main() -> io::Result<()> {
     info!("Service is starting");
     loop {
         let mut buf = [0; 1024];
-        let (len, addr) = match sock.recv_from(&mut buf).await {
+        let (len, _) = match sock.recv_from(&mut buf).await {
             Ok((len, addr)) => (len, addr),
             Err(e) => {
                 error!("Error while getting data from UDP socket: {:?}", e);
@@ -59,6 +56,7 @@ async fn main() -> io::Result<()> {
             }
         };
 
+        // Extract data and send it to the influxdb service
         let data = match String::from_utf8(buf[..len].to_vec()) {
             Ok(s) => s,
             Err(e) => {
@@ -68,10 +66,5 @@ async fn main() -> io::Result<()> {
         };
 
         let _ = tx.send(data.clone()).await;
-
-        info!(
-            "received: len: {:?}, addr: {:?}, data: {:?}",
-            len, addr, data
-        );
     }
 }

@@ -152,13 +152,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_data() {
-        let token = String::from("");
+        let token = String::from("==");
         let client = InfClient::new(
             String::from("https://eu-central-1-1.aws.cloud2.influxdata.com"),
             token,
-            "8abb847537d8fb7c".to_string(),
+            "9c772b9be7760a80".to_string(),
         );
-        let point = "airSensors,sensor_id=TLM0201 temperature=73.97038159354763,humidity=35.23103248356096,co=0.48445310567793615 1724611938000000000";
+        let point = "airSensors,sensor_id=TLM0201 temperature=73.97038159354763,humidity=35.23103248356096,co=0.48445310567793615 1725183005000000000";
         let d = client.write_point("test", point).await;
 
         assert_eq!(String::from(""), d.unwrap());
